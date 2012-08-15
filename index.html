@@ -1,0 +1,46 @@
+<script src="gravity.js"></script>
+<link href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css" rel="stylesheet" type="text/css"/>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js"></script>
+<script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/jquery-ui.min.js"></script>
+
+
+<style type='text/css'>
+	body{
+	}
+
+	h2, p{
+		font-family: arial;
+		margin:0;
+		font-weight: normal;
+	}
+
+	a{
+		text-decoration: none;
+		font-family: arial;
+	}
+
+	a:hover{
+		text-decoration: underline;
+	}
+
+	#gravity-canvas{
+		border: 1px solid #ccc;
+		background: fafafa;
+	}
+</style>
+
+<body>
+	<h2>Gravity Sim by Reid Horuff</h2>
+	<p>Hold to create object and increase mass, drag to create velocity vector.</p>
+	<canvas id="gravity-canvas">
+		<h1>Your browser isn't supported :(</h1>
+	</canvas>
+	</br>
+	<a href='javascript:toggleGravity();'>gravity</a>
+	<a href='javascript:toggleTrail();'>trail</a>
+	<a href='javascript:toggleBounds();'>bounds</a>
+</body>
+
+<script type='text/javascript'>
+	init();
+</script>
