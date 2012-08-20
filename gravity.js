@@ -1,75 +1,219 @@
-var canvas, ctx,
-mouseDown = false,
-wasDown = false,
-bodys = new Array(), 
-mousex, 
-mousey,
-downx,
-downy,
-upx,
-upy,
-gravity = 0.002,
-minDrag = 3,
-gravityActivate = false,
-dispTrail = true,
-keepBounds = true,
-minDrag = 5,
-defaultDensity = 0.8,
-defaultTrailLen = 500;
+/* mouse handeling */
+var 
+mouseDown=false,
+mousex=0,
+mousey=0;
 
-function init()
-{
-	canvas = document.getElementById("gravity-canvas");
-	ctx = canvas.getContext("2d");
+document.onmousedown = function(ev){ mouseDown=true; };
+document.onmouseup   = function(ev){ mouseDown=false; };
+document.onmousemove = function(ev){
+	if(ev.offsetX){
+		mousex = ev.offsetX; 
+		mousey = ev.offsetY;
+	}
+	else{
+		mousex = ev.layerX; 
+		mousey = ev.layerY;
+	}
+};
 
-	document.onmousedown = function(ev){ mouseDown = true };
-	document.onmouseup = function(ev){ mouseDown = false; };
-	document.onmousemove = function(ev){
-		if(ev.offsetX){
-			mousex = ev.offsetX; 
-			mousey = ev.offsetY;
+/* gravity sim object */
+function GravitySimulator(canvas){
+
+	console.log('created');
+
+	/* HTML canvas object */
+	this.canvas = canvas;
+	this.context = this.canvas.getContext("2d");
+
+	this.bodys = new Array();
+
+	this.gravityForce = 0.0015;
+	this.gravityActivate = false;
+	this.dispTrail = true;
+	this.keepBounds = false;
+	this.minDrag = 5;
+	this.density = 0.8;
+	this.defaultTrailLen = 100;
+	this.showFabric = false;
+	this.massByVolume = false;
+
+	/* sloppy */
+	this.canvas.width = window.innerWidth * 0.9;
+	this.canvas.height = window.innerHeight * 0.9;
+
+	/* public */
+	this.start = function(){
+		console.log('started');
+		var self = this;
+		setInterval(function(){ self.loop(); }, 10);
+	}
+
+	/* end constructor */
+
+	/* private */
+	var working=false, start_x, start_y, currbody;
+	this.loop = function(){	
+		//clear canvas
+		this.canvas.width = this.canvas.width;
+
+		if(mouseDown){
+
+			if(this.working){
+
+				//create vector
+				if( dist(mousex, mousey, this.start_x, this.start_y) > Math.max(this.minDrag, this.currbody.radius) ){
+					this.currbody.drawDragline();
+					this.currbody.xmove = (mousex - this.start_x) * 0.01;
+					this.currbody.ymove = (mousey - this.start_y) * 0.01;
+				}
+
+				//increase radius
+				else{
+					this.currbody.radius += 0.1;
+					this.currbody.calcMass();
+					this.currbody.xmove = 0;
+					this.currbody.ymove = 0;
+				}
+			}
+
+			//init
+			else{
+				if( mousex >= 0 && mousex <= this.canvas.width && mousey >= 0 && mousey <= this.canvas.height){ 
+					this.currbody = new Body(this, mousex, mousey, 1);
+					console.log('create');
+					this.working = true;
+					this.start_x = mousex;
+					this.start_y = mousey;
+				}
+			}
+
+			if(this.currbody != null){
+				this.currbody.drawPlaceholder();
+			}
 		}
 		else{
-			mousex = ev.layerX; 
-			mousey = ev.layerY;
+			//release after creation
+			if(this.working){
+				this.bodys.push( this.currbody );
+			}
+
+			this.working = false;
 		}
-	};
-	
-	canvas.width = window.innerWidth * 0.9; 
-	canvas.height = window.innerHeight * 0.9;
-	
-	setInterval(loop, 10);
+
+		//if(this.showFabric){
+		//	this.drawLines();
+		//}
+
+		this.drawBodys();
+	}
+
+	/* private */
+	this.drawBodys = function()
+	{
+		if(this.gravityActivate){
+			for(var index in this.bodys){
+				this.bodys[index].calcForce();
+			}
+		}
+		
+		for(var index in this.bodys){
+			if(this.gravityActivate){
+				this.bodys[index].move();
+				if(this.keepBounds){
+					this.bodys[index].bounceWall();
+				}
+			}
+			this.bodys[index].draw();
+		}
+	}
+
+	/* private */
+	this.recalcAllMass = function(){
+		for(var index in this.bodys){
+			this.bodys[index].calcMass();
+		}
+	}
+
+	/* environment change functions */
+	this.toggleGravity = function(){
+		this.gravityActivate = !this.gravityActivate;
+	}
+
+	this.toggleTrail = function(){
+		this.dispTrail = !this.dispTrail;
+	}
+
+	this.toggleBounds = function(){
+		this.keepBounds = !this.keepBounds;
+	}
+
+	this.toggleFabric = function(){
+		this.showFabric = !this.showFabric;
+	}
+
+	this.toggleMassFunction = function(){
+		this.massByVolume = !this.massByVolume;
+		this.recalcAllMass();
+	}
+
+	this.setDensity = function(density){
+		this.density = density;
+		this.recalcAllMass();
+	}
 }
+/* end gravity sim obj */ 
 
 /* body object */
-function body(x, y, r)
+function Body(simulator, x, y, rad)
 {
+	/* simulator instance */
+	this.simulator = simulator;
+
+	/* canvas */
+	this.canvas = simulator.canvas;
+
+	/* context */
+	this.context = simulator.context;
+
 	/* phys vars */
 	this.xpos = x;
 	this.ypos = y;
-	this.radius = r;
+	this.radius = rad;
 	this.xforce = 0;
 	this.yforce = 0;
 	this.xmove = 0;
 	this.ymove = 0;
-	this.density = defaultDensity;
-	this.mass = volRad(this.radius) * this.density;
+	this.mass = 1;
 
 	/* colors */
 	this.color = "rgba(20,20,20,0.8)";
-	this.trailColor = "rgba(255,140,0,0.2);";
+	this.trailColor = "rgba(255,140,0,0.15);";
 	this.placeholderColor = "rgba(30,30,30,0.5);";
+	this.triangleColor = "rgba(255,140,0,0.5);";
 
 	/* trail vars */
-	this.trailLength = defaultTrailLen;
+	this.trailLength = simulator.defaultTrailLen;
 	this.listX = new Array();
 	this.listY = new Array();
 	this.listX.push( this.xpos );
 	this.listY.push( this.ypos );
 	this.listPos = 1;
+
+	this.calcMass = function(){
+
+		if(simulator.massByVolume){
+			this.mass = volRad(this.radius) * simulator.density;
+		}
+		else{
+			this.mass = SARad(this.radius) * simulator.density;
+		}
+	}
 	
 	/*functions*/
 	this.move = function(){
+
+		//console.log(this.mass);
 
 		this.xmove += this.xforce/this.mass;
 		this.ymove += this.yforce/this.mass;
@@ -87,6 +231,7 @@ function body(x, y, r)
 		}
 	};
 
+	/* still working on this */
 	this.collide = function(other){
 		var ci = other.xpos - this.xpos;
 		var cj = other.ypos - this.ypos;
@@ -106,67 +251,179 @@ function body(x, y, r)
 			this.ypos = this.radius + 1;
 		}
 		
-		if( this.xpos >= canvas.width - this.radius - 1 ){
+		if( this.xpos >= this.canvas.width - this.radius - 1 ){
 			this.xmove *= -1;
-			this.xpos = canvas.width - this.radius - 1;
+			this.xpos = this.canvas.width - this.radius - 1;
 		}
 		
-		if( this.ypos >= canvas.height - this.radius - 1 ){
+		if( this.ypos >= this.canvas.height - this.radius - 1 ){
 			this.ymove *= -1;
-			this.ypos = canvas.height - this.radius - 1;
+			this.ypos = this.canvas.height - this.radius - 1;
 		}
 	};
 
-	this.draw = function(){
-		ctx.beginPath();
-		ctx.fillStyle = this.color;
-		ctx.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
-		ctx.closePath();
-		ctx.fill();
-		
-		if(!dispTrail){
-			return;
-		}
-			
-		ctx.beginPath();
-		ctx.strokeStyle = this.trailColor;
-		
-		for(var x=0; x < Math.min(this.trailLength, this.listY.length); x++){
-			var p = (this.listY.length<this.trailLength)?x:(x + this.listPos) % this.trailLength;
-			
-			if( x==0 ){
-				 ctx.moveTo(this.listX[p], this.listY[p]);
+	this.drawVertTriangle = function(x, y){
+		var width = 10, height = 10;
+
+		this.context.beginPath();
+		this.context.fillStyle = this.triangleColor;
+
+		this.context.moveTo(x, y);
+
+		this.context.lineTo(x-width, y-height);
+		this.context.lineTo(x-width, y+height);
+
+		this.context.lineTo(x+width, y-height);
+		this.context.lineTo(x+width, y+height);
+
+		this.context.fill();
+	}
+
+	this.drawHorTriangle = function(x, y){
+		var width = 10, height = 10;
+
+		this.context.beginPath();
+		this.context.fillStyle = this.triangleColor;
+
+		this.context.moveTo(x, y);
+
+		this.context.lineTo(x-width, y-height);
+		this.context.lineTo(x+width, y-height);
+
+		this.context.lineTo(x-width, y+height);
+		this.context.lineTo(x+width, y+height);
+
+		this.context.fill();
+	}
+
+	this.drawCornerDiamond = function(x, y){
+
+		var rad = 10;
+
+		this.context.beginPath();
+		this.context.fillStyle = this.triangleColor;
+
+		this.context.moveTo(x-rad, y);
+		this.context.lineTo(x, y+rad);
+		this.context.lineTo(x+rad, y);
+		this.context.lineTo(x, y-rad);
+
+		this.context.fill();
+	}
+
+	this.drawMarkers = function(right, left, top, bottom){
+
+		if(right){
+			/* top right */
+			if(top){
+				this.drawCornerDiamond(this.canvas.width, 0);
 			}
+			/* bottom right */
+			else if(bottom){
+				this.drawCornerDiamond(this.canvas.width, this.canvas.height);
+			}
+			/* just right */
 			else{
-				ctx.lineTo(this.listX[p], this.listY[p]);
+				this.drawVertTriangle(this.canvas.width, this.ypos);
 			}
 		}
+		else if(left){
+			/* top left */
+			if(top){
+				this.drawCornerDiamond(0, 0);
+			}
+			/* bottom left */
+			else if(bottom){
+				this.drawCornerDiamond(0, this.canvas.height);
+			}
+			/* just left */
+			else{
+				this.drawVertTriangle(0, this.ypos);
+			}
+		}
+		/* just top */
+		else if(top){
+			this.drawHorTriangle(this.xpos, 0)
+		}
+		/* just bottom */
+		else if(bottom){
+			this.drawHorTriangle(this.xpos, this.canvas.height);
+		}
+
+		else{
+			return false;
+		}
+
+		return true;
+	}
+
+	this.draw = function(){
+
+		/* out of bounds */
+		var right  = (this.xpos-this.radius) > this.canvas.width;
+		var left   = (this.xpos+this.radius) < 0;
+		var top    = (this.ypos+this.radius) < 0;
+		var bottom = (this.ypos-this.radius) > this.canvas.height;
+
+		if( !this.drawMarkers(right, left, top, bottom) ){
+			this.context.beginPath();
+			this.context.fillStyle = this.color;
+			this.context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
+			this.context.closePath();
+			this.context.fill();
+		}
 		
-	    ctx.stroke();
+		if(simulator.dispTrail){
+			this.context.beginPath();
+			this.context.strokeStyle = this.trailColor;
+			
+			for(var x=0; x < Math.min(this.trailLength, this.listY.length); x++){
+				var p = (this.listY.length<this.trailLength)?x:(x + this.listPos) % this.trailLength;
+				
+				if( x==0 ){
+					 this.context.moveTo(this.listX[p], this.listY[p]);
+				}
+				else{
+					this.context.lineTo(this.listX[p], this.listY[p]);
+				}
+			}
+			
+		    this.context.stroke();
+		}
 	};
 
 	this.drawPlaceholder = function(){
-		ctx.beginPath();
-		ctx.fillStyle = this.placeholderColor;
-		ctx.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
-		ctx.closePath();
-		ctx.stroke();
+		this.context.beginPath();
+		this.context.fillStyle = this.placeholderColor;
+		this.context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
+		this.context.closePath();
+		this.context.stroke();
 	};
+
+	this.drawDragline = function(){
+		this.context.beginPath();
+		this.context.strokeStyle = "rgba(00,00,255,0.8)";
+	    this.context.moveTo(this.xpos, this.ypos);
+	    this.context.lineTo(mousex, mousey);
+	    this.context.stroke();
+	}
 
 	this.calcForce = function(){
 		this.xforce = 0;
 		this.yforce = 0;
+
+		var bodys = simulator.bodys;
 		
 		for(var index in bodys){
-			var other = bodys[index];
+			var other = simulator.bodys[index];
 			
 			if(this != other){
 				var xdis = other.xpos-this.xpos;
 				var ydis = other.ypos-this.ypos;
-				var disqr = xdis*xdis + ydis*ydis;
+				var disqr = Math.max(1, xdis*xdis + ydis*ydis);
 				
-				this.xforce += (gravity*this.mass*other.mass)/(disqr)*xdis;
-				this.yforce += (gravity*this.mass*other.mass)/(disqr)*ydis;
+				this.xforce += (simulator.gravityForce*this.mass*other.mass)/(disqr)*xdis;
+				this.yforce += (simulator.gravityForce*this.mass*other.mass)/(disqr)*ydis;
 			}
 		}
 		
@@ -175,14 +432,6 @@ function body(x, y, r)
 			this.yforce /= (bodys.length-1);
 		}
 	};
-
-	this.drawDragline = function(){
-		ctx.beginPath();
-		ctx.strokeStyle = "rgba(00,00,255,0.8)";
-	    ctx.moveTo(this.xpos, this.ypos);
-	    ctx.lineTo(mousex, mousey);
-	    ctx.stroke();
-	}
 }
 
 function forcefromPoint(x, y)
@@ -197,8 +446,8 @@ function forcefromPoint(x, y)
 		var ydis = other.ypos-y;
 		var disqr = xdis*xdis + ydis*ydis;
 			
-		xforce += (gravity*other.mass)/(disqr)*xdis;
-		yforce += (gravity*other.mass)/(disqr)*ydis;
+		xforce += (simulator.gravityForce*other.mass)/(disqr)*xdis;
+		yforce += (simulator.gravityForce*other.mass)/(disqr)*ydis;
 	}
 	
 	if(bodys.length > 1){
@@ -237,11 +486,11 @@ function nearestObject(x, y)
 
 function drawLines()
 {
-	var gridSize = 10;	
+	var gridSize = 20;	
 	var coord = new Array(Math.floor((canvas.width/gridSize) * (canvas.height/gridSize)));
 	
-	ctx.beginPath();
-	ctx.strokeStyle = "rgba(00,00,255,0.8)";
+	context.beginPath();
+	context.strokeStyle = "rgba(00,00,255,0.8)";
 	
 	for(var index in bodys){
 		var body = bodys[index];
@@ -264,101 +513,13 @@ function drawLines()
 		for(var x=gridSize; x < canvas.width; x += gridSize){
 			var c = coord[y*canvas.width + x];
 			//console.log(c[0] + " : " + x[1]);
-			ctx.moveTo(x+c[0],y+c[1]);
-			ctx.lineTo(x+c[0]+1,y+c[1]);
+			context.moveTo(x+c[0],y+c[1]);
+			context.lineTo(x+c[0]+1,y+c[1]);
 		}
 	}	
 	
-	ctx.stroke();
+	context.stroke();
 }
-
-var working=false, start_x, start_y, currbody;
-
-function loop()
-{	
-	//clear canvas
-	canvas.width = canvas.width;
-
-	if(mouseDown){
-		if(working){
-
-			//create vector
-			if( dist(mousex, mousey, start_x, start_y) > Math.max(minDrag, currbody.radius) ){
-				currbody.drawDragline();
-				currbody.xmove = (mousex - start_x) * 0.01;
-				currbody.ymove = (mousey - start_y) * 0.01;
-			}
-
-			//increase radius
-			else{
-				currbody.radius += 0.1;
-				currbody.mass = volRad(currbody.radius) * currbody.density;
-				currbody.xmove = 0;
-				currbody.ymove = 0;
-			}
-		}
-
-		//init
-		else{
-			if( mousex >= 0 && mousex <= canvas.width && mousey >= 0 && mousey <= canvas.height){ 
-				currbody = new body(mousex, mousey, 1);
-				working = true;
-				start_x = mousex;
-				start_y = mousey;
-			}
-		}
-
-		if(currbody != null){
-			currbody.drawPlaceholder();
-		}
-	}
-	else{
-		//release after creation
-		if(working){
-			bodys.push( currbody );
-		}
-
-		working = false;
-	}
-
-	drawLines();	
-	drawbodys();
-}
-
-function drawbodys()
-{
-	if(gravityActivate){
-		for(var index in bodys){
-			bodys[index].calcForce();
-		}
-	}
-	
-	for(var index in bodys){
-		if(gravityActivate){
-			bodys[index].move();
-			if(keepBounds){
-				bodys[index].bounceWall();
-			}
-		}
-		bodys[index].draw();
-	}
-}
-
-function toggleGravity()
-{
-	gravityActivate = !gravityActivate;
-}
-
-function toggleTrail()
-{
-	dispTrail = !dispTrail;
-}
-
-function toggleBounds()
-{
-	keepBounds = !keepBounds;
-}
-
 
 /*math helper functions */
 function sign(x)

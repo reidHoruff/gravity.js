@@ -36,11 +36,16 @@
 		<h1>Your browser isn't supported :(</h1>
 	</canvas>
 	</br>
-	<a href='javascript:toggleGravity();'>gravity</a>
-	<a href='javascript:toggleTrail();'>trail</a>
-	<a href='javascript:toggleBounds();'>bounds</a>
+	<a href='javascript:sim.toggleGravity();'>gravity</a>
+	<a href='javascript:sim.toggleTrail();'>trail</a>
+	<a href='javascript:sim.toggleBounds();'>bounds</a>
+	<a href='javascript:sim.toggleFabric();'>fabric</a>
+	<a href='javascript:sim.toggleMassFunction();'>mass-function</a>
 </body>
 
 <script type='text/javascript'>
-	init();
+	var sim = new GravitySimulator( document.getElementById("gravity-canvas") );
+	sim.start();
+
+	//init();
 </script>
