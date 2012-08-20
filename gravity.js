@@ -101,9 +101,9 @@ function GravitySimulator(canvas){
 			this.working = false;
 		}
 
-		//if(this.showFabric){
-		//	this.drawLines();
-		//}
+		if(this.showFabric){
+			this.drawLines();
+		}
 
 		this.drawBodys();
 	}
@@ -160,6 +160,46 @@ function GravitySimulator(canvas){
 	this.setDensity = function(density){
 		this.density = density;
 		this.recalcAllMass();
+	}
+
+	/* grid */
+	this.drawLines = function()
+	{
+		var gridSize = 22, overlap = 200;
+		var coord = new Array(Math.floor((this.canvas.width/gridSize) * (this.canvas.height/gridSize)));
+		
+		this.context.beginPath();
+		this.context.strokeStyle = "rgba(00,00,255,0.3)";
+		
+		/* calc force from all frid points */
+		for(var index in this.bodys){
+			var body = this.bodys[index];
+			
+			for(var y= -overlap; y < this.canvas.height + overlap; y += gridSize){
+				for(var x= -overlap; x < this.canvas.width + overlap; x += gridSize){
+					if(coord[y*this.canvas.width + x] == undefined){
+						coord[y*this.canvas.width + x] = [0,0];
+					}
+
+					/* mass/dist^2 */
+					var distq = distSq(x, y, body.xpos, body.ypos);
+					coord[y*this.canvas.width + x][0] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(x, body.xpos) * 0.5;
+					coord[y*this.canvas.width + x][1] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(y, body.ypos) * 0.5;
+				}
+			}		
+		}
+		
+		/* draw all points */
+		for(var y= -overlap; y < this.canvas.height + overlap; y += gridSize){
+			for(var x = -overlap; x < this.canvas.width + overlap; x += gridSize){
+				var c = coord[y*this.canvas.width + x];
+				//console.log(c[0] + " : " + x[1]);
+				this.context.moveTo(x+c[0],y+c[1]);
+				this.context.lineTo(x+c[0]+1,y+c[1]);
+			}
+		}	
+		
+		this.context.stroke();
 	}
 }
 /* end gravity sim obj */ 
@@ -432,93 +472,6 @@ function Body(simulator, x, y, rad)
 			this.yforce /= (bodys.length-1);
 		}
 	};
-}
-
-function forcefromPoint(x, y)
-{
-	var xforce = 0;
-	var yforce = 0;
-	
-	for(var index in bodys){
-		var other = bodys[index];
-		
-		var xdis = other.xpos-x;
-		var ydis = other.ypos-y;
-		var disqr = xdis*xdis + ydis*ydis;
-			
-		xforce += (simulator.gravityForce*other.mass)/(disqr)*xdis;
-		yforce += (simulator.gravityForce*other.mass)/(disqr)*ydis;
-	}
-	
-	if(bodys.length > 1){
-		xforce /= (bodys.length-1);
-		yforce /= (bodys.length-1);
-	}
-	
-	return{
-		'xforce':xforce,
-		'yforce':yforce
-	};
-}
-
-function nearestObject(x, y)
-{
-	var xpos = -1, ypos = -1, min = -1;
-	
-	for(var index in bodys){
-		var body = bodys[index];
-		var xdis = body.xpos-x;
-		var ydis = body.ypos-x;
-		var dis = Math.sqrt(xdis*xdis + ydis*ydis);
-		
-		if(min < 0 || min > dis){
-			min = dis;
-			xpos = body.xpos;
-			ypos = body.ypos;
-		}
-	}
-	
-	return{
-		'xpos':xpos,
-		'ypos':ypos
-	};	
-}
-
-function drawLines()
-{
-	var gridSize = 20;	
-	var coord = new Array(Math.floor((canvas.width/gridSize) * (canvas.height/gridSize)));
-	
-	context.beginPath();
-	context.strokeStyle = "rgba(00,00,255,0.8)";
-	
-	for(var index in bodys){
-		var body = bodys[index];
-		
-		for(var y=gridSize; y < canvas.height; y += gridSize){
-			for(var x=gridSize; x < canvas.width; x += gridSize){
-				if(coord[y*canvas.width + x] == undefined){
-					coord[y*canvas.width + x] = [0,0];
-				}
-				/* mass/dist^2 */
-				
-				var distq = distSq(x, y, body.xpos, body.ypos);
-				coord[y*canvas.width + x][0] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(x, body.xpos) * 0.5;
-				coord[y*canvas.width + x][1] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(y, body.ypos) * 0.5;
-			}
-		}		
-	}
-	
-	for(var y=gridSize; y < canvas.height; y += gridSize){
-		for(var x=gridSize; x < canvas.width; x += gridSize){
-			var c = coord[y*canvas.width + x];
-			//console.log(c[0] + " : " + x[1]);
-			context.moveTo(x+c[0],y+c[1]);
-			context.lineTo(x+c[0]+1,y+c[1]);
-		}
-	}	
-	
-	context.stroke();
 }
 
 /*math helper functions */
