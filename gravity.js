@@ -28,12 +28,12 @@ function GravitySimulator(canvas){
 
 	this.bodys = new Array();
 
-	this.gravityForce = 0.0015;
+	this.gravityForce = 0.001;
 	this.gravityActivate = false;
 	this.dispTrail = true;
 	this.keepBounds = false;
 	this.minDrag = 5;
-	this.density = 0.8;
+	this.density = 1;
 	this.defaultTrailLen = 100;
 	this.showFabric = false;
 	this.massByVolume = false;
@@ -46,20 +46,20 @@ function GravitySimulator(canvas){
 	this.start = function(){
 		console.log('started');
 		var self = this;
-		setInterval(function(){ self.loop(); }, 10);
+		setInterval(function(){ self.loop(); }, 12);
 	}
 
 	/* end constructor */
 
 	/* private */
-	var working=false, start_x, start_y, currbody;
+	var creating=false, moving=false, start_x, start_y, currbody, offsetx, offsety;
 	this.loop = function(){	
 		//clear canvas
 		this.canvas.width = this.canvas.width;
 
 		if(mouseDown){
 
-			if(this.working){
+			if(this.creating){
 
 				//create vector
 				if( dist(mousex, mousey, this.start_x, this.start_y) > Math.max(this.minDrag, this.currbody.radius) ){
@@ -76,29 +76,47 @@ function GravitySimulator(canvas){
 					this.currbody.ymove = 0;
 				}
 			}
-
+			else if(this.moving){
+				this.currbody.xpos = mousex - this.offsetx;
+				this.currbody.ypos = mousey - this.offsety;
+			}
 			//init
 			else{
-				if( mousex >= 0 && mousex <= this.canvas.width && mousey >= 0 && mousey <= this.canvas.height){ 
-					this.currbody = new Body(this, mousex, mousey, 1);
-					console.log('create');
-					this.working = true;
-					this.start_x = mousex;
-					this.start_y = mousey;
+				if( mousex >= 0 && mousex <= this.canvas.width && mousey >= 0 && mousey <= this.canvas.height){
+
+					var body = this.getBody(mousex, mousey);
+
+					/* is touching body */
+					if(body !== false){
+						this.currbody = body;
+						this.offsetx = mousex - body.xpos;
+						this.offsety = mousey - body.ypos;
+						this.moving = true;
+					}
+					else{
+						this.currbody = new Body(this, mousex, mousey, 1);
+						this.creating = true;
+						this.start_x = mousex;
+						this.start_y = mousey;
+					}
 				}
 			}
 
-			if(this.currbody != null){
+			if(this.currbody != null && this.creating){
 				this.currbody.drawPlaceholder();
 			}
 		}
 		else{
 			//release after creation
-			if(this.working){
+			if(this.creating){
 				this.bodys.push( this.currbody );
+				this.currbody = null;
+				this.creating = false;
 			}
 
-			this.working = false;
+			else if(this.moving){
+				this.moving = false;
+			}
 		}
 
 		if(this.showFabric){
@@ -106,6 +124,18 @@ function GravitySimulator(canvas){
 		}
 
 		this.drawBodys();
+	}
+
+	this.getBody = function(x, y){
+		for(index in this.bodys){
+			var body = this.bodys[index];
+
+			if(dist(x, y, body.xpos, body.ypos) < body.radius ){
+				return body;
+			}
+		}
+
+		return false;
 	}
 
 	/* private */
@@ -120,6 +150,7 @@ function GravitySimulator(canvas){
 		for(var index in this.bodys){
 			if(this.gravityActivate){
 				this.bodys[index].move();
+
 				if(this.keepBounds){
 					this.bodys[index].bounceWall();
 				}
@@ -239,16 +270,6 @@ function Body(simulator, x, y, rad)
 	this.listX.push( this.xpos );
 	this.listY.push( this.ypos );
 	this.listPos = 1;
-
-	this.calcMass = function(){
-
-		if(simulator.massByVolume){
-			this.mass = volRad(this.radius) * simulator.density;
-		}
-		else{
-			this.mass = SARad(this.radius) * simulator.density;
-		}
-	}
 	
 	/*functions*/
 	this.move = function(){
@@ -261,6 +282,7 @@ function Body(simulator, x, y, rad)
 		this.xpos += this.xmove;
 		this.ypos += this.ymove;
 		
+		/* trail */
 		var lp = (this.listPos + this.trailLength - 1) % this.trailLength;
 		
 		if(Math.abs(this.listX[lp]-this.xpos) >= 1 || Math.abs(this.listY[lp]-this.ypos) >= 1){
@@ -268,6 +290,38 @@ function Body(simulator, x, y, rad)
 			this.listY[this.listPos] = this.ypos;
 			this.listPos++;
 			this.listPos %= this.trailLength;	
+		}
+	};
+
+	this.calcMass = function(){
+
+		if(simulator.massByVolume){
+			this.mass = volRad(this.radius) * simulator.density;
+		}
+		else{
+			this.mass = SARad(this.radius) * simulator.density;
+		}
+	}
+
+	this.calcForce = function(){
+		this.xforce = 0;
+		this.yforce = 0;
+
+		var bodys = simulator.bodys;
+
+		/* calc sum force vector from all other objects */
+		
+		for(var index in bodys){
+			var other = simulator.bodys[index];
+			
+			if(this != other){
+				var xdis = other.xpos-this.xpos;
+				var ydis = other.ypos-this.ypos;
+				var disqr = Math.max(1, xdis*xdis + ydis*ydis);
+				
+				this.xforce += (simulator.gravityForce*this.mass*other.mass)/(disqr)*xdis;
+				this.yforce += (simulator.gravityForce*this.mass*other.mass)/(disqr)*ydis;
+			}
 		}
 	};
 
@@ -302,6 +356,43 @@ function Body(simulator, x, y, rad)
 		}
 	};
 
+	/* main draw function */
+	this.draw = function(){
+
+		/* out of bounds */
+		var right  = (this.xpos-this.radius) > this.canvas.width;
+		var left   = (this.xpos+this.radius) < 0;
+		var top    = (this.ypos+this.radius) < 0;
+		var bottom = (this.ypos-this.radius) > this.canvas.height;
+
+		if( !this.drawMarkers(right, left, top, bottom) ){
+			this.context.beginPath();
+			this.context.fillStyle = this.color;
+			this.context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
+			this.context.closePath();
+			this.context.fill();
+		}
+		
+		if(simulator.dispTrail){
+			this.context.beginPath();
+			this.context.strokeStyle = this.trailColor;
+			
+			for(var x=0; x < Math.min(this.trailLength, this.listY.length); x++){
+				var p = (this.listY.length<this.trailLength)?x:(x + this.listPos) % this.trailLength;
+				
+				if( x==0 ){
+					 this.context.moveTo(this.listX[p], this.listY[p]);
+				}
+				else{
+					this.context.lineTo(this.listX[p], this.listY[p]);
+				}
+			}
+			
+		    this.context.stroke();
+		}
+	};
+
+	/* verticle out of bounds triangle */
 	this.drawVertTriangle = function(x, y){
 		var width = 10, height = 10;
 
@@ -319,6 +410,7 @@ function Body(simulator, x, y, rad)
 		this.context.fill();
 	}
 
+	/* horizontal out of bounds triangle */
 	this.drawHorTriangle = function(x, y){
 		var width = 10, height = 10;
 
@@ -336,6 +428,7 @@ function Body(simulator, x, y, rad)
 		this.context.fill();
 	}
 
+	/* corner out of bounds diamond */
 	this.drawCornerDiamond = function(x, y){
 
 		var rad = 10;
@@ -351,6 +444,7 @@ function Body(simulator, x, y, rad)
 		this.context.fill();
 	}
 
+	/* braws appropriate out of bounds marker */
 	this.drawMarkers = function(right, left, top, bottom){
 
 		if(right){
@@ -397,41 +491,7 @@ function Body(simulator, x, y, rad)
 		return true;
 	}
 
-	this.draw = function(){
-
-		/* out of bounds */
-		var right  = (this.xpos-this.radius) > this.canvas.width;
-		var left   = (this.xpos+this.radius) < 0;
-		var top    = (this.ypos+this.radius) < 0;
-		var bottom = (this.ypos-this.radius) > this.canvas.height;
-
-		if( !this.drawMarkers(right, left, top, bottom) ){
-			this.context.beginPath();
-			this.context.fillStyle = this.color;
-			this.context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
-			this.context.closePath();
-			this.context.fill();
-		}
-		
-		if(simulator.dispTrail){
-			this.context.beginPath();
-			this.context.strokeStyle = this.trailColor;
-			
-			for(var x=0; x < Math.min(this.trailLength, this.listY.length); x++){
-				var p = (this.listY.length<this.trailLength)?x:(x + this.listPos) % this.trailLength;
-				
-				if( x==0 ){
-					 this.context.moveTo(this.listX[p], this.listY[p]);
-				}
-				else{
-					this.context.lineTo(this.listX[p], this.listY[p]);
-				}
-			}
-			
-		    this.context.stroke();
-		}
-	};
-
+	/* draws placeholder while body is being created */
 	this.drawPlaceholder = function(){
 		this.context.beginPath();
 		this.context.fillStyle = this.placeholderColor;
@@ -440,6 +500,7 @@ function Body(simulator, x, y, rad)
 		this.context.stroke();
 	};
 
+	/* draws velocity vector during creation */
 	this.drawDragline = function(){
 		this.context.beginPath();
 		this.context.strokeStyle = "rgba(00,00,255,0.8)";
@@ -447,31 +508,6 @@ function Body(simulator, x, y, rad)
 	    this.context.lineTo(mousex, mousey);
 	    this.context.stroke();
 	}
-
-	this.calcForce = function(){
-		this.xforce = 0;
-		this.yforce = 0;
-
-		var bodys = simulator.bodys;
-		
-		for(var index in bodys){
-			var other = simulator.bodys[index];
-			
-			if(this != other){
-				var xdis = other.xpos-this.xpos;
-				var ydis = other.ypos-this.ypos;
-				var disqr = Math.max(1, xdis*xdis + ydis*ydis);
-				
-				this.xforce += (simulator.gravityForce*this.mass*other.mass)/(disqr)*xdis;
-				this.yforce += (simulator.gravityForce*this.mass*other.mass)/(disqr)*ydis;
-			}
-		}
-		
-		if(bodys.length > 1){
-			this.xforce /= (bodys.length-1);
-			this.yforce /= (bodys.length-1);
-		}
-	};
 }
 
 /*math helper functions */
