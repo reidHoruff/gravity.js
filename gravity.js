@@ -2,10 +2,29 @@
 var 
 mouseDown=false,
 mousex=0,
-mousey=0;
+mousey=0,
+downx=0,
+downy=0,
+controlKey=false;
 
-document.onmousedown = function(ev){ mouseDown=true; };
-document.onmouseup   = function(ev){ mouseDown=false; };
+document.onmousedown = function(ev){
+	controlKey = (ev.ctrlKey==1);
+	mouseDown=true;
+
+	if(ev.offsetX){
+		downx = ev.offsetX; 
+		downy = ev.offsetY;
+	}
+	else{
+		downx = ev.layerX; 
+		downy = ev.layerY;
+	}
+};
+
+document.onmouseup = function(ev){
+	mouseDown=false;
+};
+
 document.onmousemove = function(ev){
 	if(ev.offsetX){
 		mousex = ev.offsetX; 
@@ -19,8 +38,6 @@ document.onmousemove = function(ev){
 
 /* gravity sim object */
 function GravitySimulator(canvas){
-
-	console.log('created');
 
 	/* HTML canvas object */
 	this.canvas = canvas;
@@ -37,10 +54,18 @@ function GravitySimulator(canvas){
 	this.defaultTrailLen = 100;
 	this.showFabric = false;
 	this.massByVolume = false;
+	this.maxObjectRadius = 50;
+
+	/* not curr used */
+	this.univOffsetX = 0;
+	this.univOffsetY = 0;
+
+	/* universe zoom */
+	this.zoom = 1;
 
 	/* sloppy */
 	this.canvas.width = window.innerWidth * 0.9;
-	this.canvas.height = window.innerHeight * 0.9;
+	this.canvas.height = window.innerHeight * 0.85;
 
 	/* public */
 	this.start = function(){
@@ -52,34 +77,47 @@ function GravitySimulator(canvas){
 	/* end constructor */
 
 	/* private */
-	var creating=false, moving=false, start_x, start_y, currbody, offsetx, offsety;
+	var creating=false, moving=false, currbody, offsetx, offsety;
 	this.loop = function(){	
 		//clear canvas
 		this.canvas.width = this.canvas.width;
 
 		if(mouseDown){
 
-			if(this.creating){
+			/* shift universe */
+			if(controlKey){
+				this.shiftUniverse(mousex-downx, mousey-downy);
+				downx = mousex;
+				downy = mousey;
+			}
+
+			/* create object */
+			else if(this.creating){
 
 				//create vector
-				if( dist(mousex, mousey, this.start_x, this.start_y) > Math.max(this.minDrag, this.currbody.radius) ){
+				if( dist(mousex, mousey, downx, downy) > Math.max(this.minDrag, this.currbody.drawrad) ){
 					this.currbody.drawDragline();
-					this.currbody.xmove = (mousex - this.start_x) * 0.01;
-					this.currbody.ymove = (mousey - this.start_y) * 0.01;
+					this.currbody.xmove = (mousex-downx) * 0.02;
+					this.currbody.ymove = (mousey-downy) * 0.02;
 				}
 
 				//increase radius
 				else{
-					this.currbody.radius += 0.1;
+					this.currbody.setRad( this.currbody.radius+0.1 );
 					this.currbody.calcMass();
 					this.currbody.xmove = 0;
 					this.currbody.ymove = 0;
 				}
 			}
+
+			/* move exiting body */
 			else if(this.moving){
-				this.currbody.xpos = mousex - this.offsetx;
-				this.currbody.ypos = mousey - this.offsety;
+				/* relation to center */
+				this.currbody.drawx = mousex - this.offsetx;
+				this.currbody.drawy = mousey - this.offsety;
+				this.currbody.calcPhysCoords();
 			}
+
 			//init
 			else{
 				if( mousex >= 0 && mousex <= this.canvas.width && mousey >= 0 && mousey <= this.canvas.height){
@@ -89,15 +127,22 @@ function GravitySimulator(canvas){
 					/* is touching body */
 					if(body !== false){
 						this.currbody = body;
-						this.offsetx = mousex - body.xpos;
-						this.offsety = mousey - body.ypos;
+
+						/* kill velocity */
+						body.xmove = 0;
+						body.ymove = 0;
+
+						/* relation to center */
+						this.offsetx = mousex - body.drawx;
+						this.offsety = mousey - body.drawy;
+
 						this.moving = true;
 					}
+
+					/* create */
 					else{
 						this.currbody = new Body(this, mousex, mousey, 1);
 						this.creating = true;
-						this.start_x = mousex;
-						this.start_y = mousey;
 					}
 				}
 			}
@@ -130,7 +175,7 @@ function GravitySimulator(canvas){
 		for(index in this.bodys){
 			var body = this.bodys[index];
 
-			if(dist(x, y, body.xpos, body.ypos) < body.radius ){
+			if(dist(x, y, body.drawx, body.drawy) < body.drawrad ){
 				return body;
 			}
 		}
@@ -193,6 +238,24 @@ function GravitySimulator(canvas){
 		this.recalcAllMass();
 	}
 
+	this.shiftUniverse = function(x, y){
+		this.univOffsetX = x;
+		this.univOffsetY = y;
+
+		/* shift all objects */
+		for(var index in this.bodys){
+			this.bodys[index].shiftPos(x, y);
+		}
+	}
+
+	this.setZoom = function(z){
+		this.zoom += z;
+
+		for(var index in this.bodys){
+			this.bodys[index].calcDrawCoords();
+		}
+	}
+
 	/* grid */
 	this.drawLines = function()
 	{
@@ -213,9 +276,9 @@ function GravitySimulator(canvas){
 					}
 
 					/* mass/dist^2 */
-					var distq = distSq(x, y, body.xpos, body.ypos);
-					coord[y*this.canvas.width + x][0] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(x, body.xpos) * 0.5;
-					coord[y*this.canvas.width + x][1] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(y, body.ypos) * 0.5;
+					var distq = distSq(x, y, body.drawx, body.drawy);
+					coord[y*this.canvas.width + x][0] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(x, body.drawx) * 0.5;
+					coord[y*this.canvas.width + x][1] += (2*Math.atan((body.mass)/(distq)))/Math.PI * ldist(y, body.drawy) * 0.5;
 				}
 			}		
 		}
@@ -236,7 +299,8 @@ function GravitySimulator(canvas){
 /* end gravity sim obj */ 
 
 /* body object */
-function Body(simulator, x, y, rad)
+/* coords are draw coords */
+function Body(simulator, dx, dy, drad)
 {
 	/* simulator instance */
 	this.simulator = simulator;
@@ -247,10 +311,17 @@ function Body(simulator, x, y, rad)
 	/* context */
 	this.context = simulator.context;
 
+	/* disp vars */
+	this.drawx = dx;
+	this.drawy = dy;
+	this.drawrad = drad;
+
 	/* phys vars */
-	this.xpos = x;
-	this.ypos = y;
-	this.radius = rad;
+
+	/* calc x,y,r from draw coords */
+	this.xpos = this.drawx / this.simulator.zoom;
+	this.ypos = this.drawy / this.simulator.zoom;
+	this.radius = this.drawrad / this.simulator.zoom;
 	this.xforce = 0;
 	this.yforce = 0;
 	this.xmove = 0;
@@ -270,6 +341,41 @@ function Body(simulator, x, y, rad)
 	this.listX.push( this.xpos );
 	this.listY.push( this.ypos );
 	this.listPos = 1;
+
+	/* shifts according to disp coords */
+	this.shiftPos = function(x_shift, y_shift){
+		this.drawx += x_shift;
+		this.drawy += y_shift;
+
+		/* adjust actual coords */
+		this.xpos = this.drawx / this.simulator.zoom;
+		this.ypos = this.drawy / this.simulator.zoom;
+
+		for(var x=0; x < Math.min(this.trailLength, this.listY.length); x++){
+			this.listX[x] += x_shift / this.simulator.zoom;
+			this.listY[x] += y_shift / this.simulator.zoom;
+		}
+	}
+
+	this.setRad = function(r){
+		//this.radius = Math.min(r, this.simulator.maxObjectRadius);
+		this.radius = r;
+		this.calcDrawCoords();
+	}
+
+	/* draw coords from phys coords */
+	this.calcDrawCoords = function(){
+		this.drawx = this.xpos * this.simulator.zoom;
+		this.drawy = this.ypos * this.simulator.zoom;
+		this.drawrad = this.radius * this.simulator.zoom;
+	}
+
+	/* phys coords from draw coords */
+	this.calcPhysCoords = function(){
+		this.xpos = this.drawx / this.simulator.zoom;
+		this.ypos = this.drawy / this.simulator.zoom;
+		this.radius = this.drawrad / this.simulator.zoom;
+	}
 	
 	/*functions*/
 	this.move = function(){
@@ -335,62 +441,78 @@ function Body(simulator, x, y, rad)
 	};
 
 	this.bounceWall = function(){
-		if( this.xpos <= this.radius + 1 ){
+		if( this.drawx <= this.drawrad + 1 ){
+			console.log('left');
 			this.xmove *= -1;
-			this.xpos = this.radius + 1;
+			this.drawx = this.drawrad + 2;
+			this.calcPhysCoords();
 		}
 		
-		if( this.ypos <= this.radius + 1 ){
+		if( this.drawy <= this.drawrad + 1 ){
 			this.ymove *= -1;
-			this.ypos = this.radius + 1;
+			this.drawy = this.drawrad + 2;
+			this.calcPhysCoords();
 		}
 		
-		if( this.xpos >= this.canvas.width - this.radius - 1 ){
+		if( this.drawx >= this.canvas.width - this.drawrad - 1 ){
 			this.xmove *= -1;
-			this.xpos = this.canvas.width - this.radius - 1;
+			this.drawx = this.canvas.width - this.drawrad - 2;
+			this.calcPhysCoords();
 		}
 		
-		if( this.ypos >= this.canvas.height - this.radius - 1 ){
+		if( this.drawy >= this.canvas.height - this.drawrad - 1 ){
 			this.ymove *= -1;
-			this.ypos = this.canvas.height - this.radius - 1;
+			this.drawy = this.canvas.height - this.drawrad - 2;
+			this.calcPhysCoords();
 		}
 	};
 
 	/* main draw function */
 	this.draw = function(){
 
-		/* out of bounds */
-		var right  = (this.xpos-this.radius) > this.canvas.width;
-		var left   = (this.xpos+this.radius) < 0;
-		var top    = (this.ypos+this.radius) < 0;
-		var bottom = (this.ypos-this.radius) > this.canvas.height;
+		/* calc draw coords from phys coords */
+		this.calcDrawCoords();
 
+		/* out of bounds bools*/
+		var right  = (this.drawx-this.drawrad) > this.canvas.width;
+		var left   = (this.drawx+this.drawrad) < 0;
+		var top    = (this.drawy+this.drawrad) < 0;
+		var bottom = (this.drawy-this.drawrad) > this.canvas.height;
+
+		/* draw out of bounds markers else draw body */
 		if( !this.drawMarkers(right, left, top, bottom) ){
-			this.context.beginPath();
-			this.context.fillStyle = this.color;
-			this.context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
-			this.context.closePath();
-			this.context.fill();
+			this.drawBody();
 		}
 		
 		if(simulator.dispTrail){
-			this.context.beginPath();
-			this.context.strokeStyle = this.trailColor;
-			
-			for(var x=0; x < Math.min(this.trailLength, this.listY.length); x++){
-				var p = (this.listY.length<this.trailLength)?x:(x + this.listPos) % this.trailLength;
-				
-				if( x==0 ){
-					 this.context.moveTo(this.listX[p], this.listY[p]);
-				}
-				else{
-					this.context.lineTo(this.listX[p], this.listY[p]);
-				}
-			}
-			
-		    this.context.stroke();
+			this.drawTrail();
 		}
 	};
+
+	/* draw trail */
+
+	this.drawTrail = function(){
+
+		this.context.beginPath();
+		this.context.strokeStyle = this.trailColor;
+		
+		for(var x=0; x < Math.min(this.trailLength, this.listY.length); x++){
+
+			/* list trunc */
+			var p = (this.listY.length<this.trailLength)?x:(x + this.listPos) % this.trailLength;
+
+			/* stores phys coords so must be so draw coords must be calculated here */
+			
+			if( x==0 ){
+				 this.context.moveTo(this.listX[p]*this.simulator.zoom, this.listY[p]*this.simulator.zoom);
+			}
+			else{
+				this.context.lineTo(this.listX[p]*this.simulator.zoom, this.listY[p]*this.simulator.zoom);
+			}
+		}
+		
+	    this.context.stroke();
+	}
 
 	/* verticle out of bounds triangle */
 	this.drawVertTriangle = function(x, y){
@@ -458,7 +580,7 @@ function Body(simulator, x, y, rad)
 			}
 			/* just right */
 			else{
-				this.drawVertTriangle(this.canvas.width, this.ypos);
+				this.drawVertTriangle(this.canvas.width, this.drawy);
 			}
 		}
 		else if(left){
@@ -472,16 +594,16 @@ function Body(simulator, x, y, rad)
 			}
 			/* just left */
 			else{
-				this.drawVertTriangle(0, this.ypos);
+				this.drawVertTriangle(0, this.drawy);
 			}
 		}
 		/* just top */
 		else if(top){
-			this.drawHorTriangle(this.xpos, 0)
+			this.drawHorTriangle(this.drawx, 0)
 		}
 		/* just bottom */
 		else if(bottom){
-			this.drawHorTriangle(this.xpos, this.canvas.height);
+			this.drawHorTriangle(this.drawx, this.canvas.height);
 		}
 
 		else{
@@ -495,18 +617,27 @@ function Body(simulator, x, y, rad)
 	this.drawPlaceholder = function(){
 		this.context.beginPath();
 		this.context.fillStyle = this.placeholderColor;
-		this.context.arc(this.xpos, this.ypos, this.radius, 0, Math.PI*2, true);		
+		this.context.arc(this.drawx, this.drawy, this.drawrad, 0, Math.PI*2, true);		
 		this.context.closePath();
-		this.context.stroke();
+		this.context.fill();
 	};
 
 	/* draws velocity vector during creation */
 	this.drawDragline = function(){
 		this.context.beginPath();
 		this.context.strokeStyle = "rgba(00,00,255,0.8)";
-	    this.context.moveTo(this.xpos, this.ypos);
+	    this.context.moveTo(this.drawx, this.drawy);
 	    this.context.lineTo(mousex, mousey);
 	    this.context.stroke();
+	}
+
+	/* draws the actual body */
+	this.drawBody = function(){
+		this.context.beginPath();
+		this.context.fillStyle = this.color;
+		this.context.arc(this.drawx, this.drawy, this.drawrad, 0, Math.PI*2, true);		
+		this.context.closePath();
+		this.context.fill();
 	}
 }
 

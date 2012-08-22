@@ -1,8 +1,5 @@
+<script src="jquery1.8.js"></script>
 <script src="gravity.js"></script>
-<link href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css" rel="stylesheet" type="text/css"/>
-<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.5/jquery.min.js"></script>
-<script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/jquery-ui.min.js"></script>
-
 
 <style type='text/css'>
 	body{
@@ -25,7 +22,7 @@
 
 	#gravity-canvas{
 		border: 1px solid #ccc;
-		background: fafafa;
+		background: #eee;
 	}
 </style>
 
@@ -45,6 +42,17 @@
 
 <script type='text/javascript'>
 	var sim = new GravitySimulator( document.getElementById("gravity-canvas") );
+
+	$('#gravity-canvas').bind('mousewheel', function(e){
+		console.log(e);
+
+        if(e.originalEvent.wheelDelta > 0) {
+            sim.setZoom(0.01);
+        }
+        else{
+        	sim.setZoom(-0.01);
+        }
+    });
 	sim.start();
 
 	//init();
