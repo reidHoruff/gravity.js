@@ -46,14 +46,14 @@ function GravitySimulator(canvas){
 	this.bodys = new Array();
 
 	this.gravityForce = 0.001;
-	this.gravityActivate = false;
+	this.gravityActivate = true;
 	this.dispTrail = true;
 	this.keepBounds = false;
 	this.minDrag = 5;
 	this.density = 1;
 	this.defaultTrailLen = 100;
 	this.showFabric = false;
-	this.massByVolume = false;
+	this.massByVolume = true;
 	this.maxObjectRadius = 50;
 
 	/* not curr used */
@@ -64,8 +64,8 @@ function GravitySimulator(canvas){
 	this.zoom = 1;
 
 	/* sloppy */
-	this.canvas.width = window.innerWidth * 0.9;
-	this.canvas.height = window.innerHeight * 0.85;
+	this.canvas.width = window.innerWidth - 260;
+	this.canvas.height = window.innerHeight - 200;
 
 	/* public */
 	this.start = function(){

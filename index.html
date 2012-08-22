@@ -1,17 +1,16 @@
-<script src="jquery1.8.js"></script>
-<script src="gravity.js"></script>
 
 <style type='text/css'>
 	body{
 	}
 
-	h2, p{
+	h2, p, label{
 		font-family: arial;
 		margin:0;
 		font-weight: normal;
 	}
 
 	a{
+		color:#77f;
 		text-decoration: none;
 		font-family: arial;
 	}
@@ -24,27 +23,95 @@
 		border: 1px solid #ccc;
 		background: #eee;
 	}
+
+	#instructions, #controls{
+		#border: 1px solid #cecece;
+		padding: 5px;
+		margin-bottom: 5px;
+	}
+
+	#instructionList{
+		display:none;
+	}
+
+	#controls{
+		width: 200px;
+	}
+
+	#controls, #gravity-canvas{
+		float:left;
+	}
 </style>
 
+<head>
+	<title>Gravity Simulator </title>
+	<script src="jquery1.8.js"></script>
+	<script src="gravity.js"></script>
+</head>
+
 <body>
-	<h2>Gravity Sim by Reid Horuff</h2>
-	<p>Hold to create object and increase mass, drag to create velocity vector.</p>
+	<h2>Gravity Sim - Reid Horuff</h2>
+
+	<div id="instructions">
+		<p>Instructions: <a href="javascript:toggleInstructions()">show</a></p>
+		<div id="instructionList">
+			<p>Click and hold to create object and increase mass, drag mouse to create velocity vector</p>
+			<p>Click on pre-existing object to move</p>
+			<p>Hold ctrl to drag universe around</p>
+			<p>scroll mouse wheel to zoom in/out</p>
+			<p>Let me know if any sentient life begins to evolve</p>
+		</div>
+	</div>
+
+	<div id="controls">
+		<label>gravity: </label><a href="javascript:toggleGravity()" id="toggleGravity">enabled</a></br>
+		<label>trail: </label><a href="javascript:toggleTrail()" id="toggleTrail">shown</a></br>
+		<label>bounds: </label><a href="javascript:toggleBounds()" id="toggleBounds">disabled</a></br>
+		<label>mass: </label><a href="javascript:toggleMass()" id="toggleMass">qubic</a></br>
+		<label>fabric: </label><a href="javascript:toggleFabric()" id="toggleFabric">hidden</a></br>
+	</div>
+
 	<canvas id="gravity-canvas">
 		<h1>Your browser isn't supported :(</h1>
 	</canvas>
-	</br>
-	<a href='javascript:sim.toggleGravity();'>gravity</a>
-	<a href='javascript:sim.toggleTrail();'>trail</a>
-	<a href='javascript:sim.toggleBounds();'>bounds</a>
-	<a href='javascript:sim.toggleFabric();'>fabric</a>
-	<a href='javascript:sim.toggleMassFunction();'>mass-function</a>
 </body>
 
 <script type='text/javascript'>
+
 	var sim = new GravitySimulator( document.getElementById("gravity-canvas") );
 
+	function toggleGravity(){
+		sim.toggleGravity();
+		$("#toggleGravity").html(sim.gravityActivate?"enbaled":"disabled");
+	}
+
+	function toggleTrail(){
+		sim.toggleTrail();
+		$("#toggleTrail").html(sim.dispTrail?"shown":"hidden");
+	}
+
+	function toggleBounds(){
+		sim.toggleBounds();
+		$("#toggleBounds").html(sim.keepBounds?"enabled":"disabled");
+	}
+
+	function toggleMass(){
+		sim.toggleMassFunction();
+		$("#toggleMass").html(sim.massByVolume?"cubic":"squared");
+	}
+
+	function toggleFabric(){
+		sim.toggleFabric();
+		$("#toggleFabric").html(sim.showFabric?"shown":"hidden");
+	}
+
+	function toggleInstructions(){
+		$('#instructionList').slideToggle('slow', function(){
+
+		});
+	}
+
 	$('#gravity-canvas').bind('mousewheel', function(e){
-		console.log(e);
 
         if(e.originalEvent.wheelDelta > 0) {
             sim.setZoom(0.01);
@@ -53,7 +120,7 @@
         	sim.setZoom(-0.01);
         }
     });
-	sim.start();
 
+	sim.start();
 	//init();
 </script>
